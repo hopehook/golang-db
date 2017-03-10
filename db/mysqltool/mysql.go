@@ -1,79 +1,73 @@
-package mysqltool
+package lib
 
 import (
 	"database/sql"
-	//"database/sql/driver"
-	"errors"
+	"fmt"
+	"strconv"
 
 	"github.com/arnehormann/sqlinternals/mysqlinternals"
 	_ "github.com/go-sql-driver/mysql"
-	//"reflect"
-	"strconv"
 )
 
-type SqlConn struct {
+var MYSQL map[string]string = map[string]string{
+	"host":         "127.0.0.1:3306",
+	"database":     "",
+	"user":         "",
+	"password":     "",
+	"maxOpenConns": "0",
+	"maxIdleConns": "0",
+}
+
+type SqlConnPool struct {
 	DriverName     string
 	DataSourceName string
 	MaxOpenConns   int64
 	MaxIdleConns   int64
-	ManulCommit    bool
-	SqlDb          *sql.DB
-	SqlTx          *sql.Tx
+	SqlDB          *sql.DB // 连接池
 }
 
-var MySQLConn *SqlConn
+var DB *SqlConnPool
 
-func InitMysql(dataSourceName string, maxIdleConns, maxOpenConns int64) error {
-	driverName := "mysql"
-	MySQLConn = &SqlConn{DriverName: driverName, DataSourceName: dataSourceName,
-		MaxOpenConns: maxOpenConns, MaxIdleConns: maxIdleConns, ManulCommit: false}
-	err := MySQLConn.open()
-	return err
+func init() {
+	dataSourceName := fmt.Sprintf("%s:%s@tcp(%s)/%s", MYSQL["user"], MYSQL["password"], MYSQL["host"], MYSQL["database"])
+	maxOpenConns, _ := strconv.ParseInt(MYSQL["maxOpenConns"], 10, 64)
+	maxIdleConns, _ := strconv.ParseInt(MYSQL["maxIdleConns"], 10, 64)
+
+	DB = &SqlConnPool{
+		DriverName:     "mysql",
+		DataSourceName: dataSourceName,
+		MaxOpenConns:   maxOpenConns,
+		MaxIdleConns:   maxIdleConns,
+	}
+	if err := DB.open(); err != nil {
+		panic("init db failed")
+	}
 }
 
-func (p *SqlConn) open() error {
-	// 默认是autocommit方式
+// 封装的连接池的方法
+func (p *SqlConnPool) open() error {
 	var err error
-	p.SqlDb, err = sql.Open(p.DriverName, p.DataSourceName)
-	p.SqlDb.SetMaxOpenConns(int(p.MaxOpenConns))
-	p.SqlDb.SetMaxIdleConns(int(p.MaxIdleConns))
+	p.SqlDB, err = sql.Open(p.DriverName, p.DataSourceName)
+	p.SqlDB.SetMaxOpenConns(int(p.MaxOpenConns))
+	p.SqlDB.SetMaxIdleConns(int(p.MaxIdleConns))
 	return err
 }
 
-func (p *SqlConn) Transaction() error {
-	if p.ManulCommit {
-		return errors.New("Operate Invalid! Reason:you are trying create the second transaction.")
-	}
-	if pingErr := p.SqlDb.Ping(); pingErr != nil {
-		return pingErr
-	}
-	var err error
-	p.SqlTx, err = p.SqlDb.Begin()
-	if err == nil {
-		p.ManulCommit = true
-	}
-	return err
+func (p *SqlConnPool) Close() error {
+	return p.SqlDB.Close()
 }
 
-func (p *SqlConn) Query(query string, args ...interface{}) ([]map[string]interface{}, error) {
-
-	if pingErr := p.SqlDb.Ping(); pingErr != nil {
-		return []map[string]interface{}{}, pingErr
-	}
-
-	rows, err := p.SqlDb.Query(query, args...)
+func (p *SqlConnPool) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
+	rows, err := p.SqlDB.Query(queryStr, args...)
+	defer rows.Close()
 	if err != nil {
 		return []map[string]interface{}{}, err
 	}
-	defer rows.Close()
 	// 返回属性字典
 	columns, err := mysqlinternals.Columns(rows)
-	if err != nil {
-		return []map[string]interface{}{}, err
-	}
 	// 获取字段类型
-	values := make([]sql.RawBytes, len(columns))
 	scanArgs := make([]interface{}, len(columns))
+	values := make([]sql.RawBytes, len(columns))
 	for i, _ := range values {
 		scanArgs[i] = &values[i]
 	}
@@ -83,7 +77,6 @@ func (p *SqlConn) Query(query string, args ...interface{}) ([]map[string]interfa
 		rowMap := make(map[string]interface{})
 		for i, value := range values {
 			rowMap[columns[i].Name()] = bytes2RealType(value, columns[i].MysqlType())
-			//fmt.Println(columns[i].Name(), columns[i].MysqlType(), reflect.ValueOf(rowMap[columns[i].Name()]), rowMap[columns[i].Name()])
 		}
 		rowsMap = append(rowsMap, rowMap)
 	}
@@ -93,23 +86,12 @@ func (p *SqlConn) Query(query string, args ...interface{}) ([]map[string]interfa
 	return rowsMap, nil
 }
 
-func (p *SqlConn) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
-	if pingErr := p.SqlDb.Ping(); pingErr != nil {
-		return nil, pingErr
-	}
-	var err error
-	var result sql.Result
-	if p.ManulCommit {
-		result, err = p.SqlTx.Exec(sqlStr, args...)
-	} else {
-		result, err = p.SqlDb.Exec(sqlStr, args...)
-	}
-	return result, err
+func (p *SqlConnPool) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
+	return p.SqlDB.Exec(sqlStr, args...)
 }
 
-func (p *SqlConn) Update(update string, args ...interface{}) (int64, error) {
-
-	result, err := p.execute(update, args...)
+func (p *SqlConnPool) Update(updateStr string, args ...interface{}) (int64, error) {
+	result, err := p.execute(updateStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -117,8 +99,8 @@ func (p *SqlConn) Update(update string, args ...interface{}) (int64, error) {
 	return affect, err
 }
 
-func (p *SqlConn) Insert(insert string, args ...interface{}) (int64, error) {
-	result, err := p.execute(insert, args...)
+func (p *SqlConnPool) Insert(insertStr string, args ...interface{}) (int64, error) {
+	result, err := p.execute(insertStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -127,8 +109,8 @@ func (p *SqlConn) Insert(insert string, args ...interface{}) (int64, error) {
 
 }
 
-func (p *SqlConn) Delete(delete string, args ...interface{}) (int64, error) {
-	result, err := p.execute(delete, args...)
+func (p *SqlConnPool) Delete(deleteStr string, args ...interface{}) (int64, error) {
+	result, err := p.execute(deleteStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -136,46 +118,91 @@ func (p *SqlConn) Delete(delete string, args ...interface{}) (int64, error) {
 	return affect, err
 }
 
-func (p *SqlConn) Rollback() error {
-	if !p.ManulCommit {
-		return errors.New("Rollback Invalid! Reason:you didn't create a transaction.")
-	}
-	if pingErr := p.SqlDb.Ping(); pingErr != nil {
-		return pingErr
-	}
-	err := p.SqlTx.Rollback()
-	if err == nil {
-		p.ManulCommit = false
-	}
-	return err
+type SqlConnTransaction struct {
+	SqlTx *sql.Tx // 单个事务连接
 }
 
-func (p *SqlConn) Commit() error {
-	if !p.ManulCommit {
-		return errors.New("Commit Invalid! Reason:you didn't create a transaction.")
-	}
-	if pingErr := p.SqlDb.Ping(); pingErr != nil {
-		return pingErr
-	}
-	err := p.SqlTx.Commit()
-	if err == nil {
-		p.ManulCommit = false
-	}
-	return err
-
-}
-
-func (p *SqlConn) Close() error {
+//// 开启一个事务
+func (p *SqlConnPool) Begin() (*SqlConnTransaction, error) {
+	var oneSqlConnTransaction = &SqlConnTransaction{}
 	var err error
-	if err = p.SqlDb.Ping(); err == nil {
-		if p.ManulCommit {
-			p.Commit()
-		}
-		err = p.SqlDb.Close()
+	if pingErr := p.SqlDB.Ping(); pingErr == nil {
+		oneSqlConnTransaction.SqlTx, err = p.SqlDB.Begin()
 	}
-	return err
+	return oneSqlConnTransaction, err
 }
 
+// 封装的单个事务连接的方法
+func (t *SqlConnTransaction) Rollback() error {
+	return t.SqlTx.Rollback()
+}
+
+func (t *SqlConnTransaction) Commit() error {
+	return t.SqlTx.Commit()
+}
+
+func (t *SqlConnTransaction) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
+	rows, err := t.SqlTx.Query(queryStr, args...)
+	defer rows.Close()
+	if err != nil {
+		return []map[string]interface{}{}, err
+	}
+	// 返回属性字典
+	columns, err := mysqlinternals.Columns(rows)
+	// 获取字段类型
+	scanArgs := make([]interface{}, len(columns))
+	values := make([]sql.RawBytes, len(columns))
+	for i, _ := range values {
+		scanArgs[i] = &values[i]
+	}
+	rowsMap := make([]map[string]interface{}, 0, 10)
+	for rows.Next() {
+		rows.Scan(scanArgs...)
+		rowMap := make(map[string]interface{})
+		for i, value := range values {
+			rowMap[columns[i].Name()] = bytes2RealType(value, columns[i].MysqlType())
+		}
+		rowsMap = append(rowsMap, rowMap)
+	}
+	if err = rows.Err(); err != nil {
+		return []map[string]interface{}{}, err
+	}
+	return rowsMap, nil
+}
+
+func (t *SqlConnTransaction) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
+	return t.SqlTx.Exec(sqlStr, args...)
+}
+
+func (t *SqlConnTransaction) Update(updateStr string, args ...interface{}) (int64, error) {
+	result, err := t.execute(updateStr, args...)
+	if err != nil {
+		return 0, err
+	}
+	affect, err := result.RowsAffected()
+	return affect, err
+}
+
+func (t *SqlConnTransaction) Insert(insertStr string, args ...interface{}) (int64, error) {
+	result, err := t.execute(insertStr, args...)
+	if err != nil {
+		return 0, err
+	}
+	lastid, err := result.LastInsertId()
+	return lastid, err
+
+}
+
+func (t *SqlConnTransaction) Delete(deleteStr string, args ...interface{}) (int64, error) {
+	result, err := t.execute(deleteStr, args...)
+	if err != nil {
+		return 0, err
+	}
+	affect, err := result.RowsAffected()
+	return affect, err
+}
+
+// others
 func bytes2RealType(src []byte, columnType string) interface{} {
 	srcStr := string(src)
 	var result interface{}
