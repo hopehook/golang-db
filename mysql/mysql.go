@@ -6,34 +6,34 @@ import (
 	"strconv"
 
 	"github.com/arnehormann/sqlinternals/mysqlinternals"
+	// import and init
 	_ "github.com/go-sql-driver/mysql"
 )
 
-var MYSQL map[string]string = map[string]string{
-	"host":         "127.0.0.1:3306",
-	"database":     "",
-	"user":         "",
-	"password":     "",
-	"maxOpenConns": "0",
-	"maxIdleConns": "0",
-}
-
-type SqlConnPool struct {
+// SQLConnPool is for DB fd
+type SQLConnPool struct {
 	DriverName     string
 	DataSourceName string
 	MaxOpenConns   int64
 	MaxIdleConns   int64
-	SqlDB          *sql.DB // 连接池
+	SQLDB          *sql.DB
 }
 
-var DB *SqlConnPool
-
-func init() {
+// Init func create DB fd by MYSQL configration map:
+//	var MYSQL = map[string]string{
+//		"host":         "127.0.0.1:3306",
+//		"database":     "",
+//		"user":         "",
+//		"password":     "",
+//		"maxOpenConns": "0",
+//		"maxIdleConns": "0",
+//	}
+func Init(MYSQL map[string]string) *SQLConnPool {
 	dataSourceName := fmt.Sprintf("%s:%s@tcp(%s)/%s", MYSQL["user"], MYSQL["password"], MYSQL["host"], MYSQL["database"])
 	maxOpenConns, _ := strconv.ParseInt(MYSQL["maxOpenConns"], 10, 64)
 	maxIdleConns, _ := strconv.ParseInt(MYSQL["maxIdleConns"], 10, 64)
 
-	DB = &SqlConnPool{
+	DB := &SQLConnPool{
 		DriverName:     "mysql",
 		DataSourceName: dataSourceName,
 		MaxOpenConns:   maxOpenConns,
@@ -42,33 +42,33 @@ func init() {
 	if err := DB.open(); err != nil {
 		panic("init db failed")
 	}
+	return DB
 }
 
-// 封装的连接池的方法
-func (p *SqlConnPool) open() error {
+func (p *SQLConnPool) open() error {
 	var err error
-	p.SqlDB, err = sql.Open(p.DriverName, p.DataSourceName)
-	p.SqlDB.SetMaxOpenConns(int(p.MaxOpenConns))
-	p.SqlDB.SetMaxIdleConns(int(p.MaxIdleConns))
+	p.SQLDB, err = sql.Open(p.DriverName, p.DataSourceName)
+	p.SQLDB.SetMaxOpenConns(int(p.MaxOpenConns))
+	p.SQLDB.SetMaxIdleConns(int(p.MaxIdleConns))
 	return err
 }
 
-func (p *SqlConnPool) Close() error {
-	return p.SqlDB.Close()
+// Close pool
+func (p *SQLConnPool) Close() error {
+	return p.SQLDB.Close()
 }
 
-func (p *SqlConnPool) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
-	rows, err := p.SqlDB.Query(queryStr, args...)
+// Query via pool
+func (p *SQLConnPool) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
+	rows, err := p.SQLDB.Query(queryStr, args...)
 	defer rows.Close()
 	if err != nil {
 		return []map[string]interface{}{}, err
 	}
-	// 返回属性字典
 	columns, err := mysqlinternals.Columns(rows)
-	// 获取字段类型
 	scanArgs := make([]interface{}, len(columns))
 	values := make([]sql.RawBytes, len(columns))
-	for i, _ := range values {
+	for i := range values {
 		scanArgs[i] = &values[i]
 	}
 	rowsMap := make([]map[string]interface{}, 0, 10)
@@ -86,11 +86,12 @@ func (p *SqlConnPool) Query(queryStr string, args ...interface{}) ([]map[string]
 	return rowsMap, nil
 }
 
-func (p *SqlConnPool) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
-	return p.SqlDB.Exec(sqlStr, args...)
+func (p *SQLConnPool) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
+	return p.SQLDB.Exec(sqlStr, args...)
 }
 
-func (p *SqlConnPool) Update(updateStr string, args ...interface{}) (int64, error) {
+// Update via pool
+func (p *SQLConnPool) Update(updateStr string, args ...interface{}) (int64, error) {
 	result, err := p.execute(updateStr, args...)
 	if err != nil {
 		return 0, err
@@ -99,7 +100,8 @@ func (p *SqlConnPool) Update(updateStr string, args ...interface{}) (int64, erro
 	return affect, err
 }
 
-func (p *SqlConnPool) Insert(insertStr string, args ...interface{}) (int64, error) {
+// Insert via pool
+func (p *SQLConnPool) Insert(insertStr string, args ...interface{}) (int64, error) {
 	result, err := p.execute(insertStr, args...)
 	if err != nil {
 		return 0, err
@@ -109,7 +111,8 @@ func (p *SqlConnPool) Insert(insertStr string, args ...interface{}) (int64, erro
 
 }
 
-func (p *SqlConnPool) Delete(deleteStr string, args ...interface{}) (int64, error) {
+// Delete via pool
+func (p *SQLConnPool) Delete(deleteStr string, args ...interface{}) (int64, error) {
 	result, err := p.execute(deleteStr, args...)
 	if err != nil {
 		return 0, err
@@ -118,31 +121,34 @@ func (p *SqlConnPool) Delete(deleteStr string, args ...interface{}) (int64, erro
 	return affect, err
 }
 
-type SqlConnTransaction struct {
-	SqlTx *sql.Tx // 单个事务连接
+// SQLConnTransaction is for transaction connection
+type SQLConnTransaction struct {
+	SQLTX *sql.Tx
 }
 
-//// 开启一个事务
-func (p *SqlConnPool) Begin() (*SqlConnTransaction, error) {
-	var oneSqlConnTransaction = &SqlConnTransaction{}
+// Begin transaction
+func (p *SQLConnPool) Begin() (*SQLConnTransaction, error) {
+	var oneSQLConnTransaction = &SQLConnTransaction{}
 	var err error
-	if pingErr := p.SqlDB.Ping(); pingErr == nil {
-		oneSqlConnTransaction.SqlTx, err = p.SqlDB.Begin()
+	if pingErr := p.SQLDB.Ping(); pingErr == nil {
+		oneSQLConnTransaction.SQLTX, err = p.SQLDB.Begin()
 	}
-	return oneSqlConnTransaction, err
+	return oneSQLConnTransaction, err
 }
 
-// 封装的单个事务连接的方法
-func (t *SqlConnTransaction) Rollback() error {
-	return t.SqlTx.Rollback()
+// Rollback transaction
+func (t *SQLConnTransaction) Rollback() error {
+	return t.SQLTX.Rollback()
 }
 
-func (t *SqlConnTransaction) Commit() error {
-	return t.SqlTx.Commit()
+// Commit transaction
+func (t *SQLConnTransaction) Commit() error {
+	return t.SQLTX.Commit()
 }
 
-func (t *SqlConnTransaction) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
-	rows, err := t.SqlTx.Query(queryStr, args...)
+// Query via transaction
+func (t *SQLConnTransaction) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
+	rows, err := t.SQLTX.Query(queryStr, args...)
 	defer rows.Close()
 	if err != nil {
 		return []map[string]interface{}{}, err
@@ -152,7 +158,7 @@ func (t *SqlConnTransaction) Query(queryStr string, args ...interface{}) ([]map[
 	// 获取字段类型
 	scanArgs := make([]interface{}, len(columns))
 	values := make([]sql.RawBytes, len(columns))
-	for i, _ := range values {
+	for i := range values {
 		scanArgs[i] = &values[i]
 	}
 	rowsMap := make([]map[string]interface{}, 0, 10)
@@ -170,11 +176,12 @@ func (t *SqlConnTransaction) Query(queryStr string, args ...interface{}) ([]map[
 	return rowsMap, nil
 }
 
-func (t *SqlConnTransaction) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
-	return t.SqlTx.Exec(sqlStr, args...)
+func (t *SQLConnTransaction) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
+	return t.SQLTX.Exec(sqlStr, args...)
 }
 
-func (t *SqlConnTransaction) Update(updateStr string, args ...interface{}) (int64, error) {
+// Update via transaction
+func (t *SQLConnTransaction) Update(updateStr string, args ...interface{}) (int64, error) {
 	result, err := t.execute(updateStr, args...)
 	if err != nil {
 		return 0, err
@@ -183,7 +190,8 @@ func (t *SqlConnTransaction) Update(updateStr string, args ...interface{}) (int6
 	return affect, err
 }
 
-func (t *SqlConnTransaction) Insert(insertStr string, args ...interface{}) (int64, error) {
+// Insert via transaction
+func (t *SQLConnTransaction) Insert(insertStr string, args ...interface{}) (int64, error) {
 	result, err := t.execute(insertStr, args...)
 	if err != nil {
 		return 0, err
@@ -193,7 +201,8 @@ func (t *SqlConnTransaction) Insert(insertStr string, args ...interface{}) (int6
 
 }
 
-func (t *SqlConnTransaction) Delete(deleteStr string, args ...interface{}) (int64, error) {
+// Delete via transaction
+func (t *SQLConnTransaction) Delete(deleteStr string, args ...interface{}) (int64, error) {
 	result, err := t.execute(deleteStr, args...)
 	if err != nil {
 		return 0, err
@@ -202,7 +211,7 @@ func (t *SqlConnTransaction) Delete(deleteStr string, args ...interface{}) (int6
 	return affect, err
 }
 
-// others
+// bytes2RealType is to convert db type to code type
 func bytes2RealType(src []byte, columnType string) interface{} {
 	srcStr := string(src)
 	var result interface{}
