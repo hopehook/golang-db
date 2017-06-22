@@ -216,6 +216,8 @@ func bytes2RealType(src []byte, columnType string) interface{} {
 	srcStr := string(src)
 	var result interface{}
 	switch columnType {
+	case "BIT":
+		fallthrough
 	case "TINYINT":
 		fallthrough
 	case "SMALLINT":
@@ -228,7 +230,33 @@ func bytes2RealType(src []byte, columnType string) interface{} {
 		fallthrough
 	case "VARCHAR":
 		fallthrough
+	case "TINY TEXT":
+		fallthrough
+	case "TEXT":
+		fallthrough
+	case "MEDIUM TEXT":
+		fallthrough
+	case "LONG TEXT":
+		fallthrough
+	case "TINY BLOB":
+		fallthrough
+	case "MEDIUM BLOB":
+		fallthrough
 	case "BLOB":
+		fallthrough
+	case "LONG BLOB":
+		fallthrough
+	case "JSON":
+		fallthrough
+	case "ENUM":
+		fallthrough
+	case "SET":
+		fallthrough
+	case "YEAR":
+		fallthrough
+	case "DATE":
+		fallthrough
+	case "TIME":
 		fallthrough
 	case "TIMESTAMP":
 		fallthrough
