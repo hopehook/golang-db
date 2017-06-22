@@ -7,22 +7,21 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-var REDIS map[string]string = map[string]string{
-	"host":         "127.0.0.1:6379",
-	"database":     "0",
-	"password":     "",
-	"maxOpenConns": "0",
-	"maxIdleConns": "0",
-}
-
-var Cache *RedisConnPool
-
-type RedisConnPool struct {
+// ConnPool is for Cache fd
+type ConnPool struct {
 	redisPool *redis.Pool
 }
 
-func init() {
-	Cache = &RedisConnPool{}
+// Init func create Cache fd by REDIS configration map:
+//	var REDIS = map[string]string{
+//		"host":         "127.0.0.1:6379",
+//		"database":     "0",
+//		"password":     "",
+//		"maxOpenConns": "0",
+//		"maxIdleConns": "0",
+//	}
+func Init(REDIS map[string]string) *ConnPool {
+	Cache := &ConnPool{}
 	maxOpenConns, _ := strconv.ParseInt(REDIS["maxOpenConns"], 10, 64)
 	maxIdleConns, _ := strconv.ParseInt(REDIS["maxIdleConns"], 10, 64)
 	database, _ := strconv.ParseInt(REDIS["database"], 10, 64)
@@ -31,6 +30,7 @@ func init() {
 	if Cache.redisPool == nil {
 		panic("init redis failed！")
 	}
+	return Cache
 }
 
 func newPool(server, password string, database, maxOpenConns, maxIdleConns int) *redis.Pool {
@@ -60,97 +60,107 @@ func newPool(server, password string, database, maxOpenConns, maxIdleConns int) 
 	}
 }
 
-// 关闭连接池
-func (p *RedisConnPool) Close() error {
+// Close pool
+func (p *ConnPool) Close() error {
 	err := p.redisPool.Close()
 	return err
 }
 
-// 当前某一个数据库，执行命令
-func (p *RedisConnPool) Do(command string, args ...interface{}) (interface{}, error) {
+// Do commands
+func (p *ConnPool) Do(command string, args ...interface{}) (interface{}, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return conn.Do(command, args...)
 }
 
-//// String（字符串）
-func (p *RedisConnPool) SetString(key string, value interface{}) (interface{}, error) {
+// SetString for string
+func (p *ConnPool) SetString(key string, value interface{}) (interface{}, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return conn.Do("SET", key, value)
 }
 
-func (p *RedisConnPool) GetString(key string) (string, error) {
-	// 从连接池里面获得一个连接
+// GetString for string
+func (p *ConnPool) GetString(key string) (string, error) {
+	// get one connection from pool
 	conn := p.redisPool.Get()
-	// 连接完关闭，其实没有关闭，是放回池里，也就是队列里面，等待下一个重用
+	// put connection to pool
 	defer conn.Close()
 	return redis.String(conn.Do("GET", key))
 }
 
-func (p *RedisConnPool) GetBytes(key string) ([]byte, error) {
+// GetBytes for bytes
+func (p *ConnPool) GetBytes(key string) ([]byte, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.Bytes(conn.Do("GET", key))
 }
 
-func (p *RedisConnPool) GetInt(key string) (int, error) {
+// GetInt for int
+func (p *ConnPool) GetInt(key string) (int, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.Int(conn.Do("GET", key))
 }
 
-func (p *RedisConnPool) GetInt64(key string) (int64, error) {
+// GetInt64 ofr int64
+func (p *ConnPool) GetInt64(key string) (int64, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.Int64(conn.Do("GET", key))
 }
 
-//// Key（键）
-func (p *RedisConnPool) DelKey(key string) (interface{}, error) {
+// DelKey for key
+func (p *ConnPool) DelKey(key string) (interface{}, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return conn.Do("DEL", key)
 }
 
-func (p *RedisConnPool) ExpireKey(key string, seconds int64) (interface{}, error) {
+// ExpireKey for key
+func (p *ConnPool) ExpireKey(key string, seconds int64) (interface{}, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return conn.Do("EXPIRE", key, seconds)
 }
 
-func (p *RedisConnPool) Keys(pattern string) ([]string, error) {
+// Keys for key
+func (p *ConnPool) Keys(pattern string) ([]string, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.Strings(conn.Do("KEYS", pattern))
 }
 
-func (p *RedisConnPool) KeysByteSlices(pattern string) ([][]byte, error) {
+// KeysByteSlices for key
+func (p *ConnPool) KeysByteSlices(pattern string) ([][]byte, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.ByteSlices(conn.Do("KEYS", pattern))
 }
 
-//// Hash（哈希表）
-func (p *RedisConnPool) SetHashMap(key string, fieldValue map[string]interface{}) (interface{}, error) {
+// SetHashMap for hash map
+func (p *ConnPool) SetHashMap(key string, fieldValue map[string]interface{}) (interface{}, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return conn.Do("HMSET", redis.Args{}.Add(key).AddFlat(fieldValue)...)
 }
 
-func (p *RedisConnPool) GetHashMapString(key string) (map[string]string, error) {
+// GetHashMapString for hash map
+func (p *ConnPool) GetHashMapString(key string) (map[string]string, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.StringMap(conn.Do("HGETALL", key))
 }
 
-func (p *RedisConnPool) GetHashMapInt(key string) (map[string]int, error) {
+// GetHashMapInt for hash map
+func (p *ConnPool) GetHashMapInt(key string) (map[string]int, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.IntMap(conn.Do("HGETALL", key))
 }
 
-func (p *RedisConnPool) GetHashMapInt64(key string) (map[string]int64, error) {
+// GetHashMapInt64 for hash map
+func (p *ConnPool) GetHashMapInt64(key string) (map[string]int64, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
 	return redis.Int64Map(conn.Do("HGETALL", key))
