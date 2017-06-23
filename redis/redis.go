@@ -103,7 +103,7 @@ func (p *ConnPool) GetInt(key string) (int, error) {
 	return redis.Int(conn.Do("GET", key))
 }
 
-// GetInt64 ofr int64
+// GetInt64 for int64
 func (p *ConnPool) GetInt64(key string) (int64, error) {
 	conn := p.redisPool.Get()
 	defer conn.Close()
