@@ -153,9 +153,7 @@ func (t *SQLConnTransaction) Query(queryStr string, args ...interface{}) ([]map[
 	if err != nil {
 		return []map[string]interface{}{}, err
 	}
-	// 返回属性字典
 	columns, err := mysqlinternals.Columns(rows)
-	// 获取字段类型
 	scanArgs := make([]interface{}, len(columns))
 	values := make([]sql.RawBytes, len(columns))
 	for i := range values {
