@@ -40,7 +40,7 @@ func Init(MYSQL map[string]string) *SQLConnPool {
 		MaxIdleConns:   maxIdleConns,
 	}
 	if err := DB.open(); err != nil {
-		panic("init db failed")
+		panic(err.Error())
 	}
 	return DB
 }
@@ -48,9 +48,15 @@ func Init(MYSQL map[string]string) *SQLConnPool {
 func (p *SQLConnPool) open() error {
 	var err error
 	p.SQLDB, err = sql.Open(p.DriverName, p.DataSourceName)
+	if err != nil {
+		return err
+	}
+	if err = p.SQLDB.Ping(); err != nil {
+		return err
+	}
 	p.SQLDB.SetMaxOpenConns(int(p.MaxOpenConns))
 	p.SQLDB.SetMaxIdleConns(int(p.MaxIdleConns))
-	return err
+	return nil
 }
 
 // Close pool
