@@ -67,10 +67,10 @@ func (p *SQLConnPool) Close() error {
 // Query via pool
 func (p *SQLConnPool) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
 	rows, err := p.SQLDB.Query(queryStr, args...)
-	defer rows.Close()
 	if err != nil {
 		return []map[string]interface{}{}, err
 	}
+	defer rows.Close()
 	columns, err := mysqlinternals.Columns(rows)
 	scanArgs := make([]interface{}, len(columns))
 	values := make([]sql.RawBytes, len(columns))
@@ -155,10 +155,10 @@ func (t *SQLConnTransaction) Commit() error {
 // Query via transaction
 func (t *SQLConnTransaction) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
 	rows, err := t.SQLTX.Query(queryStr, args...)
-	defer rows.Close()
 	if err != nil {
 		return []map[string]interface{}{}, err
 	}
+	defer rows.Close()
 	columns, err := mysqlinternals.Columns(rows)
 	scanArgs := make([]interface{}, len(columns))
 	values := make([]sql.RawBytes, len(columns))
