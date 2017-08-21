@@ -1,51 +1,42 @@
-package redis
+package lib
 
 import (
-	"strconv"
+	"log"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
 
-// ConnPool is for Cache fd
+// ConnPool is RDS struct
 type ConnPool struct {
 	redisPool *redis.Pool
 }
 
-// Init func create Cache fd by REDIS configration map:
-//	var REDIS = map[string]string{
-//		"host":         "127.0.0.1:6379",
-//		"database":     "0",
-//		"password":     "",
-//		"maxOpenConns": "0",
-//		"maxIdleConns": "0",
-//	}
-func Init(REDIS map[string]string) *ConnPool {
-	Cache := &ConnPool{}
-	maxOpenConns, _ := strconv.ParseInt(REDIS["maxOpenConns"], 10, 64)
-	maxIdleConns, _ := strconv.ParseInt(REDIS["maxIdleConns"], 10, 64)
-	database, _ := strconv.ParseInt(REDIS["database"], 10, 64)
-
-	Cache.redisPool = newPool(REDIS["host"], REDIS["password"], int(database), int(maxOpenConns), int(maxIdleConns))
-	if Cache.redisPool == nil {
-		panic("init redis failed！")
+// InitRedisPool func init RDS fd
+func InitRedisPool(host, password string, database, maxOpenConns, maxIdleConns int) *ConnPool {
+	r := &ConnPool{}
+	r.redisPool = newPool(host, password, database, maxOpenConns, maxIdleConns)
+	if _, err := r.Do("PING"); err != nil {
+		log.Panicln("Init redis pool failed.", err.Error())
 	}
-	return Cache
+	return r
 }
 
 func newPool(server, password string, database, maxOpenConns, maxIdleConns int) *redis.Pool {
 	return &redis.Pool{
 		MaxActive:   maxOpenConns, // max number of connections
 		MaxIdle:     maxIdleConns,
-		IdleTimeout: 10 * time.Second,
+		IdleTimeout: 120 * time.Second,
 		Dial: func() (redis.Conn, error) {
 			c, err := redis.Dial("tcp", server)
 			if err != nil {
 				return nil, err
 			}
-			if _, err := c.Do("AUTH", password); err != nil {
-				c.Close()
-				return nil, err
+			if len(password) > 0 {
+				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
 			}
 			if _, err := c.Do("select", database); err != nil {
 				c.Close()
