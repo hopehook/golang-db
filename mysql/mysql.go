@@ -1,48 +1,38 @@
-package mysql
+package lib
 
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strconv"
 
-	"github.com/arnehormann/sqlinternals/mysqlinternals"
+	"caribbean/lib/internal/sqlinternals/mysqlinternals"
 	// import and init
 	_ "github.com/go-sql-driver/mysql"
 )
 
-// SQLConnPool is for DB fd
+// SQLConnPool is DB pool struct
 type SQLConnPool struct {
 	DriverName     string
 	DataSourceName string
-	MaxOpenConns   int64
-	MaxIdleConns   int64
+	MaxOpenConns   int
+	MaxIdleConns   int
 	SQLDB          *sql.DB
 }
 
-// Init func create DB fd by MYSQL configration map:
-//	var MYSQL = map[string]string{
-//		"host":         "127.0.0.1:3306",
-//		"database":     "",
-//		"user":         "",
-//		"password":     "",
-//		"maxOpenConns": "0",
-//		"maxIdleConns": "0",
-//	}
-func Init(MYSQL map[string]string) *SQLConnPool {
-	dataSourceName := fmt.Sprintf("%s:%s@tcp(%s)/%s", MYSQL["user"], MYSQL["password"], MYSQL["host"], MYSQL["database"])
-	maxOpenConns, _ := strconv.ParseInt(MYSQL["maxOpenConns"], 10, 64)
-	maxIdleConns, _ := strconv.ParseInt(MYSQL["maxIdleConns"], 10, 64)
-
-	DB := &SQLConnPool{
+// InitMySQLPool func init DB pool
+func InitMySQLPool(host, database, user, password, charset string, maxOpenConns, maxIdleConns int) *SQLConnPool {
+	dataSourceName := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=%s&autocommit=true", user, password, host, database, charset)
+	db := &SQLConnPool{
 		DriverName:     "mysql",
 		DataSourceName: dataSourceName,
 		MaxOpenConns:   maxOpenConns,
 		MaxIdleConns:   maxIdleConns,
 	}
-	if err := DB.open(); err != nil {
-		panic(err.Error())
+	if err := db.open(); err != nil {
+		log.Panicln("Init mysql pool failed.", err.Error())
 	}
-	return DB
+	return db
 }
 
 func (p *SQLConnPool) open() error {
@@ -54,8 +44,8 @@ func (p *SQLConnPool) open() error {
 	if err = p.SQLDB.Ping(); err != nil {
 		return err
 	}
-	p.SQLDB.SetMaxOpenConns(int(p.MaxOpenConns))
-	p.SQLDB.SetMaxIdleConns(int(p.MaxIdleConns))
+	p.SQLDB.SetMaxOpenConns(p.MaxOpenConns)
+	p.SQLDB.SetMaxIdleConns(p.MaxIdleConns)
 	return nil
 }
 
@@ -68,6 +58,7 @@ func (p *SQLConnPool) Close() error {
 func (p *SQLConnPool) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
 	rows, err := p.SQLDB.Query(queryStr, args...)
 	if err != nil {
+		log.Println(err)
 		return []map[string]interface{}{}, err
 	}
 	defer rows.Close()
@@ -156,6 +147,7 @@ func (t *SQLConnTransaction) Commit() error {
 func (t *SQLConnTransaction) Query(queryStr string, args ...interface{}) ([]map[string]interface{}, error) {
 	rows, err := t.SQLTX.Query(queryStr, args...)
 	if err != nil {
+		log.Println(err)
 		return []map[string]interface{}{}, err
 	}
 	defer rows.Close()
@@ -220,57 +212,15 @@ func bytes2RealType(src []byte, columnType string) interface{} {
 	srcStr := string(src)
 	var result interface{}
 	switch columnType {
-	case "BIT":
-		fallthrough
-	case "TINYINT":
-		fallthrough
-	case "SMALLINT":
-		fallthrough
-	case "INT":
-		fallthrough
-	case "BIGINT":
+	case "BIT", "TINYINT", "SMALLINT", "INT", "BIGINT":
 		result, _ = strconv.ParseInt(srcStr, 10, 64)
-	case "CHAR":
-		fallthrough
-	case "VARCHAR":
-		fallthrough
-	case "TINY TEXT":
-		fallthrough
-	case "TEXT":
-		fallthrough
-	case "MEDIUM TEXT":
-		fallthrough
-	case "LONG TEXT":
-		fallthrough
-	case "TINY BLOB":
-		fallthrough
-	case "MEDIUM BLOB":
-		fallthrough
-	case "BLOB":
-		fallthrough
-	case "LONG BLOB":
-		fallthrough
-	case "JSON":
-		fallthrough
-	case "ENUM":
-		fallthrough
-	case "SET":
-		fallthrough
-	case "YEAR":
-		fallthrough
-	case "DATE":
-		fallthrough
-	case "TIME":
-		fallthrough
-	case "TIMESTAMP":
-		fallthrough
-	case "DATETIME":
+	case "CHAR", "VARCHAR",
+		"TINY TEXT", "TEXT", "MEDIUM TEXT", "LONG TEXT",
+		"TINY BLOB", "MEDIUM BLOB", "BLOB", "LONG BLOB",
+		"JSON", "ENUM", "SET",
+		"YEAR", "DATE", "TIME", "TIMESTAMP", "DATETIME":
 		result = srcStr
-	case "FLOAT":
-		fallthrough
-	case "DOUBLE":
-		fallthrough
-	case "DECIMAL":
+	case "FLOAT", "DOUBLE", "DECIMAL":
 		result, _ = strconv.ParseFloat(srcStr, 64)
 	default:
 		result = nil
