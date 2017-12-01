@@ -6,7 +6,7 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/arnehormann/sqlinternals/mysqlinternals"
+	"github.com/hopehook/sqlinternals/mysqlinternals"
 	// import and init
 	_ "github.com/go-sql-driver/mysql"
 )
