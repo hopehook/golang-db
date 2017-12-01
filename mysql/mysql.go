@@ -73,7 +73,7 @@ func (p *SQLConnPool) Query(queryStr string, args ...interface{}) ([]map[string]
 		rows.Scan(scanArgs...)
 		rowMap := make(map[string]interface{})
 		for i, value := range values {
-			rowMap[columns[i].Name()] = bytes2RealType(value, columns[i].MysqlType())
+			rowMap[columns[i].Name()] = bytes2RealType(value, columns[i])
 		}
 		rowsMap = append(rowsMap, rowMap)
 	}
@@ -162,7 +162,7 @@ func (t *SQLConnTransaction) Query(queryStr string, args ...interface{}) ([]map[
 		rows.Scan(scanArgs...)
 		rowMap := make(map[string]interface{})
 		for i, value := range values {
-			rowMap[columns[i].Name()] = bytes2RealType(value, columns[i].MysqlType())
+			rowMap[columns[i].Name()] = bytes2RealType(value, columns[i])
 		}
 		rowsMap = append(rowsMap, rowMap)
 	}
@@ -208,12 +208,18 @@ func (t *SQLConnTransaction) Delete(deleteStr string, args ...interface{}) (int6
 }
 
 // bytes2RealType is to convert db type to code type
-func bytes2RealType(src []byte, columnType string) interface{} {
+func bytes2RealType(src []byte, column mysqlinternals.Column) interface{} {
 	srcStr := string(src)
 	var result interface{}
-	switch columnType {
-	case "BIT", "TINYINT", "SMALLINT", "INT", "BIGINT":
+	switch column.MysqlType() {
+	case "BIT", "TINYINT", "SMALLINT", "INT":
 		result, _ = strconv.ParseInt(srcStr, 10, 64)
+	case "BIGINT":
+		if column.IsUnsigned() {
+			result, _ = strconv.ParseUint(srcStr, 10, 64)
+		} else {
+			result, _ = strconv.ParseInt(srcStr, 10, 64)
+		}
 	case "CHAR", "VARCHAR",
 		"TINY TEXT", "TEXT", "MEDIUM TEXT", "LONG TEXT",
 		"TINY BLOB", "MEDIUM BLOB", "BLOB", "LONG BLOB",
