@@ -83,13 +83,13 @@ func (p *SQLConnPool) Query(queryStr string, args ...interface{}) ([]map[string]
 	return rowsMap, nil
 }
 
-func (p *SQLConnPool) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
+func (p *SQLConnPool) Exec(sqlStr string, args ...interface{}) (sql.Result, error) {
 	return p.SQLDB.Exec(sqlStr, args...)
 }
 
 // Update via pool
 func (p *SQLConnPool) Update(updateStr string, args ...interface{}) (int64, error) {
-	result, err := p.execute(updateStr, args...)
+	result, err := p.Exec(updateStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -99,7 +99,7 @@ func (p *SQLConnPool) Update(updateStr string, args ...interface{}) (int64, erro
 
 // Insert via pool
 func (p *SQLConnPool) Insert(insertStr string, args ...interface{}) (int64, error) {
-	result, err := p.execute(insertStr, args...)
+	result, err := p.Exec(insertStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +110,7 @@ func (p *SQLConnPool) Insert(insertStr string, args ...interface{}) (int64, erro
 
 // Delete via pool
 func (p *SQLConnPool) Delete(deleteStr string, args ...interface{}) (int64, error) {
-	result, err := p.execute(deleteStr, args...)
+	result, err := p.Exec(deleteStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -172,13 +172,13 @@ func (t *SQLConnTransaction) Query(queryStr string, args ...interface{}) ([]map[
 	return rowsMap, nil
 }
 
-func (t *SQLConnTransaction) execute(sqlStr string, args ...interface{}) (sql.Result, error) {
+func (t *SQLConnTransaction) Exec(sqlStr string, args ...interface{}) (sql.Result, error) {
 	return t.SQLTX.Exec(sqlStr, args...)
 }
 
 // Update via transaction
 func (t *SQLConnTransaction) Update(updateStr string, args ...interface{}) (int64, error) {
-	result, err := t.execute(updateStr, args...)
+	result, err := t.Exec(updateStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -188,7 +188,7 @@ func (t *SQLConnTransaction) Update(updateStr string, args ...interface{}) (int6
 
 // Insert via transaction
 func (t *SQLConnTransaction) Insert(insertStr string, args ...interface{}) (int64, error) {
-	result, err := t.execute(insertStr, args...)
+	result, err := t.Exec(insertStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -199,7 +199,7 @@ func (t *SQLConnTransaction) Insert(insertStr string, args ...interface{}) (int6
 
 // Delete via transaction
 func (t *SQLConnTransaction) Delete(deleteStr string, args ...interface{}) (int64, error) {
-	result, err := t.execute(deleteStr, args...)
+	result, err := t.Exec(deleteStr, args...)
 	if err != nil {
 		return 0, err
 	}

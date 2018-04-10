@@ -1,6 +1,6 @@
 # golang-db
 
-### mysql tool introduction
+### mysql pool helper introduction
 
 1 go get github.com/hopehook/golang-db/mysql
 
@@ -10,5 +10,26 @@
 ```go
 import "github.com/hopehook/golang-db/mysql"
 
+// get a mysql db pool as global variable
 DB := mysql.InitMySQLPool(host, database, user, password, charset, maxOpenConns, maxIdleConns)
+
+// use helper function
+data, err := DB.Query(`select * from table limit 10`)
+... ...
+
+// use transaction
+TX, _ := DB.Begin()
+defer TX.Rollback()
+TX.Exec(`delete from table where id = 1`)
+TX.Commit()
+
+// if you want to use golang own function, please get DB.SQLDB as your db pool variable
+SQLDB = DB.SQLDB
+SQLDB.Exec(`delete from table where id = 1`)
+
+// use golang own transaction
+TX, _ := SQLDB.Begin()
+defer TX.Rollback()
+TX.Exec(`delete from table where id = 1`)
+TX.Commit()
 ```
