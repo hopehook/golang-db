@@ -24,7 +24,7 @@ TX.Exec(`delete from table where id = 1`)
 TX.Commit()
 
 // if you want to use golang own function, please get DB.SQLDB as your db pool variable
-SQLDB = DB.SQLDB
+SQLDB := DB.SQLDB
 SQLDB.Exec(`delete from table where id = 1`)
 
 // use golang own transaction
