@@ -16,7 +16,9 @@ in CONTRIBUTORS.
 
 1 go get github.com/hopehook/golang-db/mysql
 
-2 please use go-sql-driver Version 1.3 (github.com/go-sql-driver/mysql)
+2 go get github.com/go-sql-driver/mysql
+
+Note: please use go-sql-driver Version >= 1.4
 
 3 code snippet
 ```go

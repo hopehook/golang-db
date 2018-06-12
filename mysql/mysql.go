@@ -6,7 +6,6 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/hopehook/sqlinternals/mysqlinternals"
 	// import and init
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -29,13 +28,13 @@ func InitMySQLPool(host, database, user, password, charset string, maxOpenConns,
 		MaxOpenConns:   maxOpenConns,
 		MaxIdleConns:   maxIdleConns,
 	}
-	if err := db.open(); err != nil {
+	if err := db.Open(); err != nil {
 		log.Panicln("Init mysql pool failed.", err.Error())
 	}
 	return db
 }
 
-func (p *SQLConnPool) open() error {
+func (p *SQLConnPool) Open() error {
 	var err error
 	p.SQLDB, err = sql.Open(p.DriverName, p.DataSourceName)
 	if err != nil {
@@ -62,7 +61,7 @@ func (p *SQLConnPool) Query(queryStr string, args ...interface{}) ([]map[string]
 		return []map[string]interface{}{}, err
 	}
 	defer rows.Close()
-	columns, err := mysqlinternals.Columns(rows)
+	columns, err := rows.ColumnTypes()
 	scanArgs := make([]interface{}, len(columns))
 	values := make([]sql.RawBytes, len(columns))
 	for i := range values {
@@ -151,7 +150,7 @@ func (t *SQLConnTransaction) Query(queryStr string, args ...interface{}) ([]map[
 		return []map[string]interface{}{}, err
 	}
 	defer rows.Close()
-	columns, err := mysqlinternals.Columns(rows)
+	columns, err := rows.ColumnTypes()
 	scanArgs := make([]interface{}, len(columns))
 	values := make([]sql.RawBytes, len(columns))
 	for i := range values {
@@ -208,18 +207,14 @@ func (t *SQLConnTransaction) Delete(deleteStr string, args ...interface{}) (int6
 }
 
 // bytes2RealType is to convert db type to code type
-func bytes2RealType(src []byte, column mysqlinternals.Column) interface{} {
+func bytes2RealType(src []byte, column *sql.ColumnType) interface{} {
 	srcStr := string(src)
 	var result interface{}
-	switch column.MysqlType() {
+	switch column.DatabaseTypeName() {
 	case "BIT", "TINYINT", "SMALLINT", "INT":
 		result, _ = strconv.ParseInt(srcStr, 10, 64)
 	case "BIGINT":
-		if column.IsUnsigned() {
-			result, _ = strconv.ParseUint(srcStr, 10, 64)
-		} else {
-			result, _ = strconv.ParseInt(srcStr, 10, 64)
-		}
+		result, _ = strconv.ParseUint(srcStr, 10, 64)
 	case "CHAR", "VARCHAR",
 		"TINY TEXT", "TEXT", "MEDIUM TEXT", "LONG TEXT",
 		"TINY BLOB", "MEDIUM BLOB", "BLOB", "LONG BLOB",
