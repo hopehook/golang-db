@@ -2,12 +2,11 @@ package mysql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"strconv"
-
-	// import and init
-	_ "github.com/go-sql-driver/mysql"
 )
 
 // SQLConnPool is DB pool struct
@@ -51,6 +50,21 @@ func (p *SQLConnPool) Open() error {
 // Close pool
 func (p *SQLConnPool) Close() error {
 	return p.SQLDB.Close()
+}
+
+// Get via pool
+func (p *SQLConnPool) Get(queryStr string, args ...interface{}) (map[string]interface{}, error) {
+	results, err := p.Query(queryStr, args...)
+	if err != nil {
+		return map[string]interface{}{}, err
+	}
+	if len(results) <= 0 {
+		return map[string]interface{}{}, sql.ErrNoRows
+	}
+	if len(results) > 1 {
+		return map[string]interface{}{}, errors.New("sql: more than one rows")
+	}
+	return results[0], nil
 }
 
 // Query via pool
@@ -102,8 +116,8 @@ func (p *SQLConnPool) Insert(insertStr string, args ...interface{}) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	lastid, err := result.LastInsertId()
-	return lastid, err
+	lastId, err := result.LastInsertId()
+	return lastId, err
 
 }
 
@@ -140,6 +154,21 @@ func (t *SQLConnTransaction) Rollback() error {
 // Commit transaction
 func (t *SQLConnTransaction) Commit() error {
 	return t.SQLTX.Commit()
+}
+
+// Get via transaction
+func (t *SQLConnTransaction) Get(queryStr string, args ...interface{}) (map[string]interface{}, error) {
+	results, err := t.Query(queryStr, args...)
+	if err != nil {
+		return map[string]interface{}{}, err
+	}
+	if len(results) <= 0 {
+		return map[string]interface{}{}, sql.ErrNoRows
+	}
+	if len(results) > 1 {
+		return map[string]interface{}{}, errors.New("sql: more than one rows")
+	}
+	return results[0], nil
 }
 
 // Query via transaction
@@ -191,8 +220,8 @@ func (t *SQLConnTransaction) Insert(insertStr string, args ...interface{}) (int6
 	if err != nil {
 		return 0, err
 	}
-	lastid, err := result.LastInsertId()
-	return lastid, err
+	lastId, err := result.LastInsertId()
+	return lastId, err
 
 }
 
