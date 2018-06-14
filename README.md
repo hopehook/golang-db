@@ -4,15 +4,7 @@ db pool helper for golang, welcome everyone contribute code, your name will
 in CONTRIBUTORS.
 
 
-### TODO
-
- * memcache db pool helper
- * mongo db pool helper
-
-  ... ... and more
-
-
-### how to use mysql pool helper
+### How to use mysql pool helper
 
 1 go get github.com/hopehook/golang-db/mysql
 
